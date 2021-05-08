@@ -119,7 +119,7 @@ class CrystStruct(object):
     @property
     def space_group(self):
         """ Get the space group of crystal. """
-        return spg.get_spacegroup(self.cell, symprec=1e-1)
+        return spg.get_spacegroup(self.cell, symprec=1e-3)
 
     #
     #  Internal Methods
@@ -578,7 +578,7 @@ class CrystStruct(object):
              _atom_type) = spg.standardize_cell(self.cell,
                                                 to_primitive=to_primitive,
                                                 no_idealize=False,
-                                                symprec=1e-2)
+                                                symprec=1e-3)
 
             _atomlist_new = [[
                 elem, np.array([], dtype=np.float64).reshape(0, 3)
