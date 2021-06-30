@@ -176,8 +176,12 @@ class CrystStruct(object):
                 myletter = fin.readline().split()[0][0]
 
             for _elem, _num in zip(elementlist, numberlist):
-                atomsites[_elem] = np.genfromtxt(
-                    itertools.islice(fin, _num), dtype=np.float64)
+                atomsites[_elem] = np.zeros((_num, 3), dtype=np.float64)
+                for i in range(_num):
+                    atomsites[_elem][i, :] = np.array(
+                        [float(a) for a in fin.readline().split()[:3]])
+                # atomsites[_elem] = np.genfromtxt(
+                #     itertools.islice(fin, _num), dtype=np.float64)
 
         if myletter in ['D', 'd']:
             frac = True
