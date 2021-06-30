@@ -6,46 +6,9 @@ from qmater.crystal import CrystStruct
 
 
 class WannierTB(object):
-    """ Class WannierTB for a Wannier tight-binding (TB) model
+    """ Class WannierTB for a Wannier tight-binding (TB) model. """
 
-    Attributes:
-        structure: A CrystStruct instance representing the crystal lattice.
-        if_soc: A boolean indicating whether spin-orbit coupling (SOC) is included or not.
-        projectors: A dict consisting of orbitals for each element.
-                - e.g. {'Na': ['s'], 'Bi': ['s', 'p']}
-        num_wann: An integer indicating the number of Wannier functions.
-        wannier_centers: A list consisting the fractional and Cartesian coordinates of Wannier centers.
-
-        _num_rpts: An integer indicating the number of R-vectors.
-        _hoplist: A list of lists which include R-vectors, hopping matrix, and degeneracy.
-                - [R-vectors, hopping matrix, deg]
-
-    Methods:
-        set_hop: set a new hopping term.
-        add_hop: add a hopping term to a current term.
-        read_wannier90_hr: set _hoplist from Wannier90 Hr file.
-        write_wannier90_hr: write Wannier90 Hr file.
-
-        _set_projectors: set projectors from a given simple projector dict.
-        _set_num_wannier: set num_wann.
-        _set_wannier_centers: set wannier_centers.
-        _set_hoplist: set or add hopping term in _hoplist.
-
-        _calc_hamk: calculate Hamiltonian on a k-point (fractional coordinate).
-        _calc_dhamdk: calculate the derivative of Hamiltonian in k at a k-point (fractional coordinate).
-        _calc_berryphase_1d: calculate Berry phase along a closed k-path.
-        _calc_berrycurvature_singlek: calculate Berry curvature for a single k-point.
-
-        calc_eigvk: calculate eigenvalues and eigenstates of a k-point (fractional coordinate).
-        calc_wilsonloop: calculate Wilson loops or hybrid Wannier charge centers (WCCs) on a k-plane.
-        calc_berrycurvature: calculate Berry curvature for a k-plane.
-        calc_quantum_metric: calculate quantum metric for a k-plane.
-
-        plot_band_structure: plot band structure for a set of given k-paths.
-        print_info: print information of Wannier TB model.
-    """
-
-    def __init__(self, structure=None,
+    def __init__(self, structure,
                  projectors=None,
                  if_soc=False,
                  fermi=0.0):
@@ -74,10 +37,27 @@ class WannierTB(object):
 
     @structure.setter
     def structure(self, structure):
-        # print(type(structure))
         if not isinstance(structure, CrystStruct):
             raise ValueError('structure should be a CrystStruct!')
         self._structure = structure
+
+    @property
+    def direct_lattice(self):
+        return self.structure.direct_lattice
+
+    @property
+    def reciprocal_lattice(self):
+        return self.structure.reciprocal_lattice
+
+    @property
+    def if_soc(self):
+        return self._if_soc
+
+    @if_soc.setter
+    def if_soc(self, if_soc):
+        if not isinstance(if_soc, bool):
+            raise ValueError('if_soc should be True or False!')
+        self._if_soc = if_soc
 
     @property
     def projectors(self):
@@ -89,6 +69,11 @@ class WannierTB(object):
             - 'p' -> 'pz', 'px', 'py'
             - 'd' -> 'dz2', 'dxz', 'dyz', 'dx2-y2', 'dxy'
         """
+        if projectors is None:
+            projectors = {}
+            for entry in self.structure.elementlist:
+                projectors[entry[0]] = ['s']
+
         if not isinstance(projectors, dict):
             raise ValueError('projectors should be a dict!')
 
@@ -100,19 +85,12 @@ class WannierTB(object):
 
         self._projectors = {}
         for _elem, _orb in projectors.items():
-            _orb_temp = [orbitals[a] if a in orbitals else [a] for a in _orb]
-            self._projectors[_elem] = [
-                a for _entry in _orb_temp for a in _entry]
-
-    @property
-    def if_soc(self):
-        return self._if_soc
-
-    @if_soc.setter
-    def if_soc(self, if_soc):
-        if not isinstance(if_soc, bool):
-            raise ValueError('if_soc should be True or False!')
-        self._if_soc = if_soc
+            self._projectors[_elem] = []
+            for a in _orb:
+                if a in orbitals:
+                    self._projectors[_elem].extend(orbitals[a])
+                else:
+                    self._projectors[_elem].append(a)
 
     @property
     def num_wann(self):
@@ -144,7 +122,7 @@ class WannierTB(object):
     def _set_wannier_parameters(self):
         """ Set self.num_wann and self.wannier_centers. """
         elementlist = self.structure.elementlist
-        atomlist = self.structure._atomlist
+        atomsites = self.structure.atom_sites
         myprojs = self.projectors
         if_soc = self.if_soc
 
@@ -157,21 +135,18 @@ class WannierTB(object):
             self._num_wann = num_wann
 
         _wcc_frac = np.zeros([self.num_wann, 3], dtype=np.float64)
-        _wcc_cart = np.zeros([self.num_wann, 3], dtype=np.float64)
 
         nc = 0
-        for _elem, _pos_frac, _pos_cart in atomlist:
-            _wcc = np.kron(_pos_frac, np.ones((len(myprojs[_elem]), 1)))
+        for _elem, _pos in atomsites.items():
+            _wcc = np.kron(_pos, np.ones((len(myprojs[_elem]), 1)))
             _wcc_frac[nc:nc + _wcc.shape[0]] = _wcc
-            _wcc = np.kron(_pos_cart, np.ones((len(myprojs[_elem]), 1)))
-            _wcc_cart[nc:nc + _wcc.shape[0]] = _wcc
             nc += _wcc.shape[0]
 
         if if_soc:
             nc = self.num_wann // 2
             _wcc_frac[nc:, :] = _wcc_frac[:nc, :]
-            _wcc_cart[nc:, :] = _wcc_cart[:nc, :]
 
+        _wcc_cart = np.dot(_wcc_frac, self.direct_lattice)
         self._wannier_centers = [_wcc_frac, _wcc_cart]
 
     # ----------------
@@ -550,7 +525,7 @@ class WannierTB(object):
             myeigval = np.linalg.eigvals(Lambda)
             berryphase_eigval = (-1.0) * np.angle(myeigval)/2.0/np.pi
             # berryphase_eigval = (-1.0)*np.log(myeigval).real/2.0/np.pi
-            berryphase_eigval = np.sort(berryphase_eigval)
+            berryphase_eigval = np.sort(np.mod(berryphase_eigval, 1.0))
             return berryphase_eigval
         else:
             mydet = np.linalg.det(Lambda)
@@ -582,9 +557,9 @@ class WannierTB(object):
         var_dir = np.array(var_dir)
 
         # k-points along integration direction
-        int_kp = np.linspace(origin, int_dir, num_kp)
+        int_kp = np.linspace(origin, origin+int_dir, num_kp)
         # k-points which are variables
-        var_kp = np.linspace(origin, var_dir, num_kp)
+        var_kp = np.linspace(origin, origin+var_dir, num_kp)
 
         wcc = np.zeros((num_kp, num_occupy), dtype=np.float64)
         for ind, kp in enumerate(var_kp):
@@ -597,26 +572,27 @@ class WannierTB(object):
         return wcc
 
     def _calc_berrycurvature_singlek(self, kp, num_occupy):
-        r""" calculate Berry curvature for a single k-point
-                - Refer to `Phys. Rev. B 74, 195118 (2006).`
+        r""" Calculate Berry curvature for a single k-point.
 
-        Args:
-            kp (list or numpy.array): k-point
-            num_occupy (int): number of occupied states
+        Refer to `Phys. Rev. B 74, 195118 (2006).`
 
-        Returns:
-            [tuple]: Berry curvature, i.e. (Omegaxy, Omegayz, Omegazx).
-                - Omegaxy (complex): \Omega_{xy}
-                - Omegayz (complex): \Omega_{yz}
-                - Omegazx (complex): \Omega_{zx}
+        Parameters
+        ----------
+        kp : list or numpy.ndarray
+            k-point
+        num_occupy : int
+            number of occupied states
+
+        Returns
+        -------
+        tuple
+            Berry curvature, i.e. (bcx, bcy, bcz)
         """
-
-        num_wann = self.num_wann
-
         _dhdk = self._calc_dhamdk(kp)
         _eigv, _eigs = self.calc_eigvk(kp)
 
         # matrix rep of velocity operator
+        # v_{mn}^\mu = 1/\hbar \langle u_{m,k}| \partial_\mu H(k) |u_{n,k} \rangle
         vx = np.dot(np.conj(_eigs.T), np.dot(_dhdk[:, :, 0], _eigs))
         vy = np.dot(np.conj(_eigs.T), np.dot(_dhdk[:, :, 1], _eigs))
         vz = np.dot(np.conj(_eigs.T), np.dot(_dhdk[:, :, 2], _eigs))
@@ -624,18 +600,21 @@ class WannierTB(object):
         omegaxy = np.complex128(0.0)
         omegayz = np.complex128(0.0)
         omegazx = np.complex128(0.0)
+        eta = 1e-6
+        for v in range(num_occupy):
+            for c in range(num_occupy, self.num_wann):
+                # To avoid the inf value at degenerate points
+                w_eta = (_eigv[c] - _eigv[v]) / \
+                    ((_eigv[c] - _eigv[v])**2 + eta**2)
+                w_eta = w_eta**2
+                omegaxy += vx[v, c] * vy[c, v] * w_eta
+                omegayz += vy[v, c] * vz[c, v] * w_eta
+                omegazx += vz[v, c] * vx[c, v] * w_eta
 
-        for m in range(num_occupy):
-            for n in range(num_occupy, num_wann):
-                omegaxy += vx[m, n] * vy[n, m] / ((_eigv[n] - _eigv[m]) ** 2)
-                omegayz += vy[m, n] * vz[n, m] / ((_eigv[n] - _eigv[m]) ** 2)
-                omegazx += vz[m, n] * vx[n, m] / ((_eigv[n] - _eigv[m]) ** 2)
-
-        omegaxy = -2.0 * omegaxy.imag
-        omegayz = -2.0 * omegayz.imag
-        omegazx = -2.0 * omegazx.imag
-
-        return omegaxy, omegayz, omegazx
+        bcx = -2.0 * omegayz.imag
+        bcy = -2.0 * omegazx.imag
+        bcz = -2.0 * omegaxy.imag
+        return bcx, bcy, bcz
 
     def _calc_quanmetric_singlek(self, kp, num_occupy):
         """ Calculate quantum metric tensor for a single k. """
@@ -683,6 +662,10 @@ class WannierTB(object):
 
         return gxx, gyy, gzz, gxy, gyz, gzx
 
+    # TODO: write the electrical polarizability of the Bloch-electron system
+    def _calc_electrical_polarizability(k):
+        pass
+
     def calc_berrycurvature(self, num_kp,
                             center=[0, 0, 0],
                             dir1=[1, 0, 0],
@@ -713,19 +696,19 @@ class WannierTB(object):
         kp_array, kpos_array = mystruct.get_kpoint_plane(
             center, dir1, dir2, num_kp_dir=num_kp)
 
-        omegaxy = np.zeros((num_kp, num_kp), dtype=np.float64)
-        omegayz = np.zeros((num_kp, num_kp), dtype=np.float64)
-        omegazx = np.zeros((num_kp, num_kp), dtype=np.float64)
+        bcx = np.zeros((num_kp, num_kp), dtype=np.float64)
+        bcy = np.zeros((num_kp, num_kp), dtype=np.float64)
+        bcz = np.zeros((num_kp, num_kp), dtype=np.float64)
 
         for i in range(num_kp):
             for j in range(num_kp):
-                _xy, _yz, _zx = self._calc_berrycurvature_singlek(
+                _x, _y, _z = self._calc_berrycurvature_singlek(
                     kp_array[i, j, :], num_occupy)
-                omegaxy[i, j] = _xy
-                omegayz[i, j] = _yz
-                omegazx[i, j] = _zx
+                bcx[i, j] = _x
+                bcy[i, j] = _y
+                bcz[i, j] = _z
 
-        return kpos_array, omegaxy, omegayz, omegazx
+        return kpos_array, bcx, bcy, bcz
 
     def calc_quantum_metric(self, num_kp,
                             center=[0, 0, 0],
@@ -812,6 +795,7 @@ class WannierTB(object):
             kp = kp_list[i, :]
             eigval, eigstat = self.calc_eigvk(kp)
             Elist[i, :] = eigval - self.fermi
+            # Elist[i, :] = np.sqrt(np.abs(eigval)) - self.fermi
 
         # plotting
         num_label = len(label_pos)
