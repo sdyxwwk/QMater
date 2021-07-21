@@ -1,4 +1,5 @@
 import os
+from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -296,9 +297,9 @@ class WannierTB(object):
             Rvec = []
             hoplist = []
 
-            for i in range(num_rpts):
-                if num_rpts > 10 and i % int(num_rpts / 10) == 0:
-                    print('R-vector: {:d}'.format(i))
+            for i in tqdm(range(num_rpts)):
+                # if num_rpts > 10 and i % int(num_rpts / 10) == 0:
+                #     print('R-vector: {:d}'.format(i))
 
                 HmnR = np.zeros((num_wann, num_wann), dtype=np.complex128)
                 for j in range(num_wann):
@@ -325,10 +326,7 @@ class WannierTB(object):
             print('========================================')
             print('')
 
-    # ----------------
-    #  write model
-    # ----------------
-    def write_wannier90_hr(self, filename='wannier90_hr.dat'):
+    def write_wannier90_hr(self, filename='wannier90_hr.dat', titleline=None):
         """ write Wannier90 Hr file
 
         Args:
@@ -343,11 +341,14 @@ class WannierTB(object):
         HmnR = [a[1] for a in self._hoplist]
         deg_rpts = [a[2] for a in self._hoplist]
 
+        if titleline is None:
+            titleline = 'written by QMater'
+
         print('========================================')
         print('          Writing Hrfile ...            ')
         print('----------------------------------------')
         with open(filename, 'w') as outfile:
-            outfile.write('written by QMater\n')
+            outfile.write(titleline + '\n')
             outfile.write('{:12d}\n'.format(num_wann))
             outfile.write('{:12d}\n'.format(num_rpts))
             nc = 0
@@ -400,7 +401,7 @@ class WannierTB(object):
             deg_rpts = _hop[2]
             HmnR = _hop[1]
             kdotr = np.dot(kp, myR)
-            Hamk += deg_rpts * np.exp(pi2j * kdotr) * HmnR[:, :]
+            Hamk += np.exp(pi2j * kdotr) * HmnR[:, :]/deg_rpts
 
         # Convention I
         Hamk = np.dot(np.conj(Umatr), np.dot(Hamk, Umatr))
@@ -526,6 +527,7 @@ class WannierTB(object):
             berryphase_eigval = (-1.0) * np.angle(myeigval)/2.0/np.pi
             # berryphase_eigval = (-1.0)*np.log(myeigval).real/2.0/np.pi
             berryphase_eigval = np.sort(np.mod(berryphase_eigval, 1.0))
+            # berryphase_eigval = np.sort(berryphase_eigval)
             return berryphase_eigval
         else:
             mydet = np.linalg.det(Lambda)
@@ -557,13 +559,14 @@ class WannierTB(object):
         var_dir = np.array(var_dir)
 
         # k-points along integration direction
-        int_kp = np.linspace(origin, origin+int_dir, num_kp)
+        int_kp = np.linspace(np.array([0.0, 0.0, 0.0]), int_dir, num_kp)
         # k-points which are variables
         var_kp = np.linspace(origin, origin+var_dir, num_kp)
 
         wcc = np.zeros((num_kp, num_occupy), dtype=np.float64)
-        for ind, kp in enumerate(var_kp):
-            kp_list = int_kp + (kp - origin)
+        for ind, kp in enumerate(tqdm(var_kp)):
+            # print(ind)
+            kp_list = kp + int_kp
 
             # get Wannier centers of each occupied state
             wcc[ind, :] = self._calc_berryphase_1d(
@@ -616,6 +619,126 @@ class WannierTB(object):
         bcz = -2.0 * omegaxy.imag
         return bcx, bcy, bcz
 
+    def calc_berrycurvature(self, num_kp,
+                            center=[0, 0, 0],
+                            dir1=[1, 0, 0],
+                            dir2=[0, 1, 0], num_occupy=1):
+        r""" calculate Berry curvature for a k-plane
+
+        Args:
+            num_kp (int): number of k-points on each direction.
+            center (list, optional): center of a k-plane. Defaults to [0, 0, 0].
+            dir1 (list, optional): direction 1 to define a k-plane. Defaults to [1, 0, 0].
+            dir2 (list, optional): direction 2 to define a k-plane. Defaults to [0, 1, 0].
+            num_occupy (int, optional): number of occupied states. Defaults to 1.
+
+        Returns:
+            [tuple]: (kpos_array, Omegaxy, Omegayz, Omegazx)
+                - kpos_array (np.array): position of k-points on k-plane. Shape is (num_kp, num_kp).
+                - Omegaxy (np.array): \Omega_{xy}.  Shape is (num_kp, num_kp).
+                - Omegayz (np.array): \Omega_{yz}.  Shape is (num_kp, num_kp).
+                - Omegazx (np.array): \Omega_{zx}.  Shape is (num_kp, num_kp).
+        """
+
+        if num_occupy > self.num_wann:
+            print('Since num_occupy > num_wann, we set num_occupy = num_wann.')
+            num_occupy = self.num_wann
+
+        mystruct = self.structure
+
+        kp_array, kpos_array = mystruct.get_kpoint_plane(
+            center, dir1, dir2, num_kp_dir=num_kp)
+
+        bcx = np.zeros((num_kp, num_kp), dtype=np.float64)
+        bcy = np.zeros((num_kp, num_kp), dtype=np.float64)
+        bcz = np.zeros((num_kp, num_kp), dtype=np.float64)
+
+        for i in range(num_kp):
+            for j in range(num_kp):
+                _x, _y, _z = self._calc_berrycurvature_singlek(
+                    kp_array[i, j, :], num_occupy)
+                bcx[i, j] = _x
+                bcy[i, j] = _y
+                bcz[i, j] = _z
+
+        return kpos_array, bcx, bcy, bcz
+
+    # TODO: write the electrical polarizability of the Bloch-electron system
+    def _calc_alpha_tensor_singlek(self, kp, num_occupy):
+        _dhdk = self._calc_dhamdk(kp)
+        _eigv, _eigs = self.calc_eigvk(kp)
+
+        # velocity operator
+        # v_{mn}^\mu = 1/\hbar \langle u_{m,k}| \partial_\mu H(k) |u_{n,k} \rangle
+        vx = np.dot(np.conj(_eigs.T), np.dot(_dhdk[:, :, 0], _eigs))
+        vy = np.dot(np.conj(_eigs.T), np.dot(_dhdk[:, :, 1], _eigs))
+        vz = np.dot(np.conj(_eigs.T), np.dot(_dhdk[:, :, 2], _eigs))
+
+        axx = np.complex128(0.0)
+        ayy = np.complex128(0.0)
+        azz = np.complex128(0.0)
+        axy = np.complex128(0.0)
+        axz = np.complex128(0.0)
+        ayz = np.complex128(0.0)
+
+        eta = 1e-6
+        for v in range(num_occupy):
+            for c in range(num_occupy, self.num_wann):
+                # To avoid the inf value at degenerate points
+                w_eta = (_eigv[v] - _eigv[c]) / \
+                    ((_eigv[v] - _eigv[c])**2 + eta**2)
+                w_eta = w_eta**3
+                # w_eta = 1.0/(_eigv[v] - _eigv[c])**3
+                axx += vx[v, c] * vx[c, v] * w_eta
+                ayy += vy[v, c] * vy[c, v] * w_eta
+                azz += vz[v, c] * vz[c, v] * w_eta
+                axy += vx[v, c] * vy[c, v] * w_eta
+                axz += vx[v, c] * vz[c, v] * w_eta
+                ayz += vy[v, c] * vz[c, v] * w_eta
+
+        axx = -2.0 * axx.real
+        ayy = -2.0 * ayy.real
+        azz = -2.0 * azz.real
+        axy = -2.0 * axy.real
+        axz = -2.0 * axz.real
+        ayz = -2.0 * ayz.real
+
+        return axx, ayy, azz, axy, axz, ayz
+
+    def calc_alpha_tensor(self, num_kp,
+                          center=[0, 0, 0],
+                          dir1=[1, 0, 0],
+                          dir2=[0, 1, 0], num_occupy=1):
+
+        if num_occupy > self.num_wann:
+            print('Since num_occupy > num_wann, we set num_occupy = num_wann.')
+            num_occupy = self.num_wann
+
+        mystruct = self.structure
+
+        kp_array, kpos_array = mystruct.get_kpoint_plane(
+            center, dir1, dir2, num_kp_dir=num_kp)
+
+        axx = np.zeros((num_kp, num_kp), dtype=np.float64)
+        ayy = np.zeros((num_kp, num_kp), dtype=np.float64)
+        azz = np.zeros((num_kp, num_kp), dtype=np.float64)
+        axy = np.zeros((num_kp, num_kp), dtype=np.float64)
+        axz = np.zeros((num_kp, num_kp), dtype=np.float64)
+        ayz = np.zeros((num_kp, num_kp), dtype=np.float64)
+
+        for i in tqdm(range(num_kp)):
+            for j in range(num_kp):
+                _xx, _yy, _zz, _xy, _xz, _yz = self._calc_alpha_tensor_singlek(
+                    kp_array[i, j, :], num_occupy)
+                axx[i, j] = _xx
+                ayy[i, j] = _yy
+                azz[i, j] = _zz
+                axy[i, j] = _xy
+                axz[i, j] = _xz
+                ayz[i, j] = _yz
+
+        return kpos_array, axx, ayy, azz, axy, axz, ayz
+
     def _calc_quanmetric_singlek(self, kp, num_occupy):
         """ Calculate quantum metric tensor for a single k. """
         eta = 1e-6
@@ -661,54 +784,6 @@ class WannierTB(object):
         gzx = gzx.real
 
         return gxx, gyy, gzz, gxy, gyz, gzx
-
-    # TODO: write the electrical polarizability of the Bloch-electron system
-    def _calc_electrical_polarizability(k):
-        pass
-
-    def calc_berrycurvature(self, num_kp,
-                            center=[0, 0, 0],
-                            dir1=[1, 0, 0],
-                            dir2=[0, 1, 0], num_occupy=1):
-        r""" calculate Berry curvature for a k-plane
-
-        Args:
-            num_kp (int): number of k-points on each direction.
-            center (list, optional): center of a k-plane. Defaults to [0, 0, 0].
-            dir1 (list, optional): direction 1 to define a k-plane. Defaults to [1, 0, 0].
-            dir2 (list, optional): direction 2 to define a k-plane. Defaults to [0, 1, 0].
-            num_occupy (int, optional): number of occupied states. Defaults to 1.
-
-        Returns:
-            [tuple]: (kpos_array, Omegaxy, Omegayz, Omegazx)
-                - kpos_array (np.array): position of k-points on k-plane. Shape is (num_kp, num_kp).
-                - Omegaxy (np.array): \Omega_{xy}.  Shape is (num_kp, num_kp).
-                - Omegayz (np.array): \Omega_{yz}.  Shape is (num_kp, num_kp).
-                - Omegazx (np.array): \Omega_{zx}.  Shape is (num_kp, num_kp).
-        """
-
-        if num_occupy > self.num_wann:
-            print('Since num_occupy > num_wann, we set num_occupy = num_wann.')
-            num_occupy = self.num_wann
-
-        mystruct = self.structure
-
-        kp_array, kpos_array = mystruct.get_kpoint_plane(
-            center, dir1, dir2, num_kp_dir=num_kp)
-
-        bcx = np.zeros((num_kp, num_kp), dtype=np.float64)
-        bcy = np.zeros((num_kp, num_kp), dtype=np.float64)
-        bcz = np.zeros((num_kp, num_kp), dtype=np.float64)
-
-        for i in range(num_kp):
-            for j in range(num_kp):
-                _x, _y, _z = self._calc_berrycurvature_singlek(
-                    kp_array[i, j, :], num_occupy)
-                bcx[i, j] = _x
-                bcy[i, j] = _y
-                bcz[i, j] = _z
-
-        return kpos_array, bcx, bcy, bcz
 
     def calc_quantum_metric(self, num_kp,
                             center=[0, 0, 0],
