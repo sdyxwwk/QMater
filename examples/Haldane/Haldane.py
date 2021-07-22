@@ -28,8 +28,8 @@ def Haldane():
     ])
     atomsites = {
         'C': np.array([
-            [1/3, 1/3, 0.0],
             [2/3, 2/3, 0.0],
+            [1/3, 1/3, 0.0],
         ])
     }
     my_struc = qm.CrystStruct.set_model(lattice, atomsites)
@@ -44,21 +44,24 @@ def Haldane():
     my_model.add_hop([0, -1, 0], [0, 1], t1)
 
     # Next nearest hopping
-    phi_a = 0.2
-    phi_b = -phi_a
-    phi = 2*np.pi/4.0  # (2*phi_a + phi_b)
+    phi = 2*np.pi/4.0
     t2 = 0.1*t1
     my_model.add_hop([1, 0, 0], [0, 0], t2*np.exp(1.j*phi))
     my_model.add_hop([0, -1, 0], [0, 0], t2*np.exp(1.j*phi))
     my_model.add_hop([-1, 1, 0], [0, 0], t2*np.exp(1.j*phi))
-    my_model.add_hop([0, 1, 0], [1, 1], t2*np.exp(-1.j*phi))
-    my_model.add_hop([1, -1, 0], [1, 1], t2*np.exp(-1.j*phi))
-    my_model.add_hop([-1, 0, 0], [1, 1], t2*np.exp(-1.j*phi))
+    my_model.add_hop([0, 1, 0], [1, 1], t2*np.exp(1.j*phi))
+    my_model.add_hop([1, -1, 0], [1, 1], t2*np.exp(1.j*phi))
+    my_model.add_hop([-1, 0, 0], [1, 1], t2*np.exp(1.j*phi))
 
     # staggered sublattice potential
-    M = 0.0*t2
+    M = 0.0*t1
     my_model.add_hop([0, 0, 0], [0, 0], M)
     my_model.add_hop([0, 0, 0], [1, 1], -M)
+
+    # my_model.write_wannier90_hr(
+    #     filename='w90_hr.dat',
+    #     titleline='Haldane model',
+    # )
 
     return my_model
 
@@ -82,7 +85,7 @@ def plot_wilsonloop(model):
         origin=[0.0, 0.0, 0.0],
         int_dir=[1.0, 0.0, 0.0],
         var_dir=[0.0, 1.0, 0.0],
-        num_occupy=2,
+        num_occupy=1,
     )
     kp = np.linspace(0.0, 1.0, nkp)
 
@@ -104,7 +107,7 @@ def plot_berrycurvature(model):
         center=[0.5, 0.5, 0.0],
         dir1=[1.0, 0.0, 0.0],
         dir2=[0.0, 1.0, 0.0],
-        num_occupy=2,
+        num_occupy=1,
     )
 
     kpos_new = np.dot(kpos, lat)
@@ -122,6 +125,7 @@ def plot_berrycurvature(model):
 
 if __name__ == '__main__':
     my_model = Haldane()
-    plot_bands(my_model)
+    my_model.structure.print_info()
+    # plot_bands(my_model)
     # plot_wilsonloop(my_model)
     # plot_berrycurvature(my_model)

@@ -158,7 +158,7 @@ the Haldane model to the graphene lattice model with the time reversal invariant
 The graphene lattice has the following translation vectors:
 \begin_inset Formula 
 \[
-\bm{a}_{1}=a(-\frac{\sqrt{3}}{2},\ \frac{3}{2}),\qquad\bm{a}_{2}=a(\frac{\sqrt{3}}{2},\ \frac{3}{2})
+\bm{t}_{1}=a(-\frac{\sqrt{3}}{2},\ \frac{3}{2}),\qquad\bm{t}_{2}=a(\frac{\sqrt{3}}{2},\ \frac{3}{2})
 \]
 
 \end_inset
@@ -168,7 +168,7 @@ where
 \end_inset
 
  is the bond length.
- The fractional coordinates of 
+ The coordinates of 
 \begin_inset Formula $A$
 \end_inset
 
@@ -179,7 +179,20 @@ where
  sites are written as
 \begin_inset Formula 
 \[
-\bm{r}_{A}=(\frac{1}{3},\ \frac{1}{3}),\qquad\bm{r}_{B}=(\frac{2}{3},\ \frac{2}{3})
+\bm{r}_{A}=\frac{2}{3}\bm{t}_{1}+\frac{2}{3}\bm{t}_{2},\qquad\bm{r}_{B}=\frac{1}{3}\bm{t}_{1}+\frac{1}{3}\bm{t}_{2}
+\]
+
+\end_inset
+
+Let 
+\begin_inset Formula $(\bm{a}_{1},\bm{a}_{2},\bm{a}_{3})$
+\end_inset
+
+ be the displacements from a B site to its three adjacent A sites, such
+ as
+\begin_inset Formula 
+\[
+\bm{a}_{1}=\bm{r}_{A}-\bm{r}_{B},\qquad\bm{a}_{2}=(\bm{r}_{A}-\bm{t}_{2})-\bm{r}_{B},\qquad\bm{a}_{3}=(\bm{r}_{A}-\bm{t}_{1})-\bm{r}_{B}
 \]
 
 \end_inset
@@ -191,19 +204,14 @@ where
 The Haldane model is expressed as,
 \begin_inset Formula 
 \[
-\mathcal{H}=t_{1}\sum_{\langle i,j\rangle}c_{i}^{\dagger}c_{j}+t_{2}e^{i\phi}\sum_{\langle\langle i,j\rangle\rangle}c_{i}^{\dagger}c_{j}+M\sum_{i}\xi_{i}c_{i}^{\dagger}c_{i},
+\mathcal{H}=t_{1}\sum_{\langle i,j\rangle}c_{i}^{\dagger}c_{j}+t_{2}\sum_{\langle\langle i,j\rangle\rangle}e^{i\nu_{ij}\phi}c_{i}^{\dagger}c_{j}+M\sum_{i}\xi_{i}c_{i}^{\dagger}c_{i},
 \]
 
 \end_inset
 
-where 
-\begin_inset Formula $c_{i}^{\dagger}=(c_{i,A}^{\dagger},c_{i,B}^{\dagger})$
-\end_inset
-
-.
- The first term is the nearest neighbor hopping term on a graphene lattice.
- The second term is a mirror symmetric spin-orbit interaction which connects
- second neighbors with a spin dependent amplitude.
+The first term is the nearest neighbor hopping term on a graphene lattice.
+ The second term is a mag interaction which connects second neighbors with
+ a spin dependent amplitude.
  Here, 
 \begin_inset Formula $v_{ij}=\frac{2}{\sqrt{3}}(\bm{d}_{i}\times\bm{d}_{j})_{z}=\pm1$
 \end_inset
@@ -241,6 +249,22 @@ where
 \end_inset
 
 .
+\end_layout
+
+\begin_layout Standard
+After Fourier transformations, the model Hamiltonian can be expressed as
+\begin_inset Formula 
+\begin{align*}
+H(\bm{k}) & =\left[\begin{array}{cc}
+M+\sum_{i=1,2,3}(t_{2}e^{i\phi}e^{i\bm{k}\cdot\bm{b}_{i}}+t_{2}e^{-i\phi}e^{-i\bm{k}\cdot\bm{b}_{i}}) & t_{1}\sum_{i=1,2,3}e^{-i\bm{k}\cdot\bm{a}_{i}}\\
+t_{1}\sum_{i=1,2,3}e^{i\bm{k}\cdot\bm{a}_{i}} & -M+\sum_{i=1,2,3}(t_{2}e^{-i\phi}e^{i\bm{k}\cdot\bm{b}_{i}}+t_{2}e^{i\phi}e^{-i\bm{k}\cdot\bm{b}_{i}})
+\end{array}\right]\\
+ & =2t_{2}\cos\phi\sum_{i=1,2,3}\cos(\bm{k}\cdot\bm{b}_{i})+t_{1}\sum_{i=1,2,3}\cos(\bm{k}\cdot\bm{a}_{i})\sigma_{x}+t_{1}\sum_{i=1,2,3}\sin(\bm{k}\cdot\bm{a}_{i})\sigma_{y}+(M-2t_{2}\sin\phi\sum_{i=1,2,3}\sin(\bm{k}\cdot\bm{b}_{i}))\sigma_{z}
+\end{align*}
+
+\end_inset
+
+
 \end_layout
 
 \end_body
