@@ -359,9 +359,9 @@ class WannierTB(object):
                     outfile.write('\n')
             outfile.write('\n')
 
-            for i in range(num_rpts):
-                if num_rpts > 10 and i % int(num_rpts / 10) == 0:
-                    print('R-vector: {:d}'.format(i))
+            for i in tqdm(range(num_rpts)):
+                # if num_rpts > 10 and i % int(num_rpts / 10) == 0:
+                #     print('R-vector: {:d}'.format(i))
 
                 for j in range(num_wann):
                     for k in range(num_wann):
