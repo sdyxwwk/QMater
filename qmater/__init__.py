@@ -10,7 +10,8 @@ __all__ = ['__version__',
            'CrystStruct',
            'WannierTB',
            'BandStruct',
-           'KdotP'
+           'KdotP',
+           'func',
            ]
 
 # import self-defined classes

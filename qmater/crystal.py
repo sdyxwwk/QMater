@@ -323,7 +323,7 @@ class CrystStruct(object):
             kdir2 = self.get_kpoint_cart(kdir2)
             kcenter = self.get_kpoint_cart(kcenter)
 
-        korigin = np.array(kplane_center) - kdir1 / 2 - kdir2 / 2
+        korigin = kcenter - kdir1 / 2 - kdir2 / 2
         kpoint1 = np.linspace(korigin, korigin + kdir1, num_kp_dir)
         kpoint2 = np.linspace(korigin, korigin + kdir2, num_kp_dir)
 

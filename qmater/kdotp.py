@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
+from scipy.optimize import minimize
 
 
 def get_kpoint_lines(kpath_start, kpath_end, num_kp_kpath=31):
@@ -71,9 +72,10 @@ def get_kpoint_plane(kplane_center, kplane_dir1, kplane_dir2, num_kp_dir=10):
 
 
 class KdotP(object):
-    def __init__(self, func, num_bands=1):
+    def __init__(self, func, num_bands=1, para_list=None):
         self.func = func
         self.num_bands = num_bands
+        self.parameters = para_list
 
     @property
     def func(self):
@@ -84,19 +86,23 @@ class KdotP(object):
         self._func = _func
 
     @property
+    def parameters(self):
+        return self._paralist
+
+    @parameters.setter
+    def parameters(self, _paralist):
+        self._paralist = _paralist
+
+    @property
     def num_bands(self):
         return self._num_bands
 
     @num_bands.setter
     def num_bands(self, _num_bands):
-        _k = np.array([0.0, 0.0, 0.0])
-        if _num_bands == self.func(_k).shape[0]:
-            self._num_bands = _num_bands
-        else:
-            raise ValueError('num_bands mismatch func!')
+        self._num_bands = _num_bands
 
     def calc_eigvk(self, kp):
-        hamk = self.func(kp)
+        hamk = self.func(kp, self.parameters)
         w, v = np.linalg.eigh(hamk)
         index = np.argsort(w.real)
         eigstat = v[:, index]
@@ -213,26 +219,72 @@ class KdotP(object):
         zmax = Emax + (Emax - Emin) * 0.05
         zmin = Emin - (Emax - Emin) * 0.05
 
-        fig = plt.figure()
-        ax = fig.gca(projection='3d')
+        try:
+            from mayavi import mlab
+            for i in select:
+                mlab.surf(
+                    kpos_array[:, :, 0], kpos_array[:, :, 1], Elist[:, :, i-1]
+                )
+            mlab.show()
+        except:
+            fig = plt.figure()
+            ax = fig.gca(projection='3d')
 
-        for i in select:
-            surf = ax.plot_surface(
-                kpos_array[:, :, 0], kpos_array[:, :, 1], Elist[:, :, i-1],
-                cmap=cm.coolwarm,
-                linewidth=0,
-                antialiased=True,
-                vmin=zmin,
-                vmax=zmax,
-                alpha=0.7,
-            )
-        return fig, ax
-        #fig.colorbar(surf, shrink=0.5, aspect=5)
-        # plt.show()
+            for i in select:
+                surf = ax.plot_surface(
+                    kpos_array[:, :, 0], kpos_array[:, :, 1], Elist[:, :, i-1],
+                    cmap=cm.coolwarm,
+                    linewidth=0,
+                    antialiased=True,
+                    vmin=zmin,
+                    vmax=zmax,
+                    alpha=0.7,
+                )
+            # fig.colorbar(surf, shrink=0.5, aspect=5)
+            plt.show()
+            # return fig, ax
+
+    #NOTE: bands = (kposlist, kx, ky, kz, energy)
+    def fit_parameters(self, bands, initial, cutoff=1.0, lplot=True):
+        num_kp = bands.shape[0]
+
+        def target_func(paralist):
+            self.parameters = paralist
+
+            _sum = 0.0
+            for _band in bands:
+                _kp = _band[1:4]
+                if np.linalg.norm(_kp) < cutoff:
+                    _en1 = _band[4:]
+                    _en2, _stat = self.calc_eigvk(_kp)
+                    _sum += np.linalg.norm(_en2 - _en1)**2
+            return _sum
+
+        my_min = minimize(target_func, initial, tol=1e-6)
+        print('parameters = ', my_min.x)
+
+        if lplot:
+            self.parameters = my_min.x
+            kpos_list = bands[:, 0:1]
+            Elist = np.zeros((num_kp, self.num_bands), dtype=np.float64)
+            for i in range(num_kp):
+                Elist[i, :], _stat = self.calc_eigvk(bands[i, 1:4])
+
+            Emax = np.amax(bands[:, 4:])
+            Emin = np.amin(bands[:, 4:])
+            ymax = Emax + (Emax - Emin) * 0.05
+            ymin = Emin - (Emax - Emin) * 0.05
+
+            fig, ax = plt.subplots()
+            ax.plot(kpos_list, bands[:, 4:], '.')
+            ax.plot(kpos_list, Elist, '--')
+            ax.set_ylim([ymin, ymax])
+            return fig, ax
+            # fig.savefig('fit.pdf', dpt=300)
 
     def print_info(self):
         num_bands = self.num_bands
-        _ham = self.func([0.0, 0.0, 0.0])
+        _ham = self.func([0.0, 0.0, 0.0], self.parameters)
 
         print('========================================')
         print('              k dot p model             ')

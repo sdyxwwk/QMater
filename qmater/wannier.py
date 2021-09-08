@@ -4,6 +4,20 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from qmater.crystal import CrystStruct
+from qmater.func import fermi_dirac, fermi_dirac_derivative
+
+# --------------------------------
+# Physical Constants
+# --------------------------------
+hbar = 6.582119569e-16  # eV s
+# hbar = 1.054571817e-34 # J s
+echarge = 1.602176634e-19  # C
+kb = 8.617333262145e-5  # eV K^-1
+
+pauli_0 = np.eye(2, dtype=np.complex128)
+pauli_x = np.array([[0., 1.], [1., 0.]], dtype=np.complex128)
+pauli_y = np.array([[0., -1j], [1j, 0]], dtype=np.complex128)
+pauli_z = np.array([[1., 0.], [0., -1.]], dtype=np.complex128)
 
 
 class WannierTB(object):
@@ -476,6 +490,28 @@ class WannierTB(object):
 
         return dHam_dk
 
+    # TODO: Create Singlek class
+    def _calc_spinmat(self, kp):
+        num_wann = self.num_wann
+        # _eigv, _eigs = self.calc_eigvk(kp)
+
+        if self.if_soc:
+            spinmat = np.zeros((num_wann, num_wann, 3), dtype=np.complex128)
+            # sx = np.kron(pauli_x, np.eye(num_wann//2))
+            # sy = np.kron(pauli_y, np.eye(num_wann//2))
+            # sz = np.kron(pauli_z, np.eye(num_wann//2))
+            # np.dot(np.conj(_eigs.T), np.dot(sx, _eigs))
+            spinmat[:, :, 0] = np.kron(pauli_x, np.eye(num_wann//2))
+            # np.dot(np.conj(_eigs.T), np.dot(sy, _eigs))
+            spinmat[:, :, 1] = np.kron(pauli_y, np.eye(num_wann//2))
+            # np.dot(np.conj(_eigs.T), np.dot(sz, _eigs))
+            spinmat[:, :, 2] = np.kron(pauli_z, np.eye(num_wann//2))
+        else:
+            spinmat = np.zeros((num_wann, num_wann, 3), dtype=np.complex128)
+            spinmat[:, :, 0] = 2.0*np.eye(num_wann)
+
+        return spinmat
+
     def _calc_berryphase_1d(self, num_occupy, kp_list, if_eigval=False):
         """ calculate Berry phase along a closed k-path
                 - Refer to `Phys. Rev. B 83, 235401 (2011).`
@@ -574,7 +610,7 @@ class WannierTB(object):
 
         return wcc
 
-    def _calc_berrycurvature_singlek(self, kp, num_occupy):
+    def _calc_berrycurv_singlek(self, kp, num_occupy, index='xy'):
         r""" Calculate Berry curvature for a single k-point.
 
         Refer to `Phys. Rev. B 74, 195118 (2006).`
@@ -585,6 +621,8 @@ class WannierTB(object):
             k-point
         num_occupy : int
             number of occupied states
+        index : string
+            index of Berry curvature
 
         Returns
         -------
@@ -593,16 +631,17 @@ class WannierTB(object):
         """
         _dhdk = self._calc_dhamdk(kp)
         _eigv, _eigs = self.calc_eigvk(kp)
+        d1, d2 = [{'x': 0, 'y': 1, 'z': 2}[i] for i in index]
 
         # matrix rep of velocity operator
         # v_{mn}^\mu = 1/\hbar \langle u_{m,k}| \partial_\mu H(k) |u_{n,k} \rangle
-        vx = np.dot(np.conj(_eigs.T), np.dot(_dhdk[:, :, 0], _eigs))
-        vy = np.dot(np.conj(_eigs.T), np.dot(_dhdk[:, :, 1], _eigs))
-        vz = np.dot(np.conj(_eigs.T), np.dot(_dhdk[:, :, 2], _eigs))
+        velocity = np.zeros((self.num_wann, self.num_wann, 3),
+                            dtype=np.complex128)
+        for i in range(3):
+            velocity[:, :, i] = np.dot(
+                np.conj(_eigs.T), np.dot(_dhdk[:, :, i], _eigs))
 
-        omegaxy = np.complex128(0.0)
-        omegayz = np.complex128(0.0)
-        omegazx = np.complex128(0.0)
+        omega = np.complex128(0.0)
         eta = 1e-6
         for v in range(num_occupy):
             for c in range(num_occupy, self.num_wann):
@@ -610,26 +649,19 @@ class WannierTB(object):
                 w_eta = (_eigv[c] - _eigv[v]) / \
                     ((_eigv[c] - _eigv[v])**2 + eta**2)
                 w_eta = w_eta**2
-                omegaxy += vx[v, c] * vy[c, v] * w_eta
-                omegayz += vy[v, c] * vz[c, v] * w_eta
-                omegazx += vz[v, c] * vx[c, v] * w_eta
+                omega += velocity[v, c, d1]*velocity[c, v, d2]*w_eta
 
-        bcx = -2.0 * omegayz.imag
-        bcy = -2.0 * omegazx.imag
-        bcz = -2.0 * omegaxy.imag
-        return bcx, bcy, bcz
+        return -2.0*omega.imag
 
-    def calc_berrycurvature(self, num_kp,
-                            center=[0, 0, 0],
-                            dir1=[1, 0, 0],
-                            dir2=[0, 1, 0], num_occupy=1):
+    def calc_berrycurv_kplane(self, num_kp, center, dir1, dir2,
+                              num_occupy=1, index='xy'):
         r""" calculate Berry curvature for a k-plane
 
         Args:
             num_kp (int): number of k-points on each direction.
-            center (list, optional): center of a k-plane. Defaults to [0, 0, 0].
-            dir1 (list, optional): direction 1 to define a k-plane. Defaults to [1, 0, 0].
-            dir2 (list, optional): direction 2 to define a k-plane. Defaults to [0, 1, 0].
+            center (list): center of a k-plane. Defaults to [0, 0, 0].
+            dir1 (list): direction 1 to define a k-plane. Defaults to [1, 0, 0].
+            dir2 (list): direction 2 to define a k-plane. Defaults to [0, 1, 0].
             num_occupy (int, optional): number of occupied states. Defaults to 1.
 
         Returns:
@@ -649,38 +681,48 @@ class WannierTB(object):
         kp_array, kpos_array = mystruct.get_kpoint_plane(
             center, dir1, dir2, num_kp_dir=num_kp)
 
-        bcx = np.zeros((num_kp, num_kp), dtype=np.float64)
-        bcy = np.zeros((num_kp, num_kp), dtype=np.float64)
-        bcz = np.zeros((num_kp, num_kp), dtype=np.float64)
+        bc = np.zeros((num_kp, num_kp), dtype=np.float64)
 
-        for i in range(num_kp):
+        for i in tqdm(range(num_kp)):
             for j in range(num_kp):
-                _x, _y, _z = self._calc_berrycurvature_singlek(
-                    kp_array[i, j, :], num_occupy)
-                bcx[i, j] = _x
-                bcy[i, j] = _y
-                bcz[i, j] = _z
+                bc[i, j] = self._calc_berrycurv_singlek(
+                    kp_array[i, j, :], num_occupy, index=index)
 
-        return kpos_array, bcx, bcy, bcz
+        return kpos_array, bc
 
-    # TODO: write the electrical polarizability of the Bloch-electron system
-    def _calc_alpha_tensor_singlek(self, kp, num_occupy):
+    def _calc_bcp_singlek_occupied(self, kp, num_occupy, index='xx'):
+        r""" Calculate Berry connection polarizability for occupied bands
+        at a single k-point.
+
+        Note: The factor \hbar^2 is eliminated by the velocity operator.
+
+        Parameters
+        ----------
+        kp : list or numpy.ndarray
+            k-point
+        num_occupy : int
+            number of occupied states
+        index : string
+            index of Berry connection polarizability
+
+        Returns
+        -------
+        A float number
+            Berry connection polarizability
+        """
         _dhdk = self._calc_dhamdk(kp)
         _eigv, _eigs = self.calc_eigvk(kp)
+        d1, d2 = [{'x': 0, 'y': 1, 'z': 2}[i] for i in index]
 
-        # velocity operator
+        # matrix rep of velocity operator
         # v_{mn}^\mu = 1/\hbar \langle u_{m,k}| \partial_\mu H(k) |u_{n,k} \rangle
-        vx = np.dot(np.conj(_eigs.T), np.dot(_dhdk[:, :, 0], _eigs))
-        vy = np.dot(np.conj(_eigs.T), np.dot(_dhdk[:, :, 1], _eigs))
-        vz = np.dot(np.conj(_eigs.T), np.dot(_dhdk[:, :, 2], _eigs))
+        velocity = np.zeros((self.num_wann, self.num_wann, 3),
+                            dtype=np.complex128)
+        for i in range(3):
+            velocity[:, :, i] = np.dot(
+                np.conj(_eigs.T), np.dot(_dhdk[:, :, i], _eigs))
 
-        axx = np.complex128(0.0)
-        ayy = np.complex128(0.0)
-        azz = np.complex128(0.0)
-        axy = np.complex128(0.0)
-        axz = np.complex128(0.0)
-        ayz = np.complex128(0.0)
-
+        gk = np.complex128(0.0)
         eta = 1e-6
         for v in range(num_occupy):
             for c in range(num_occupy, self.num_wann):
@@ -689,55 +731,188 @@ class WannierTB(object):
                     ((_eigv[v] - _eigv[c])**2 + eta**2)
                 w_eta = w_eta**3
                 # w_eta = 1.0/(_eigv[v] - _eigv[c])**3
-                axx += vx[v, c] * vx[c, v] * w_eta
-                ayy += vy[v, c] * vy[c, v] * w_eta
-                azz += vz[v, c] * vz[c, v] * w_eta
-                axy += vx[v, c] * vy[c, v] * w_eta
-                axz += vx[v, c] * vz[c, v] * w_eta
-                ayz += vy[v, c] * vz[c, v] * w_eta
+                gk += velocity[v, c, d1]*velocity[c, v, d2]*w_eta
 
-        axx = -2.0 * axx.real
-        ayy = -2.0 * ayy.real
-        azz = -2.0 * azz.real
-        axy = -2.0 * axy.real
-        axz = -2.0 * axz.real
-        ayz = -2.0 * ayz.real
+        return 2.0*gk.real
 
-        return axx, ayy, azz, axy, axz, ayz
+    def _calc_bcp_singlek_fermi(self, kp, mu, index='xx'):
+        _dhdk = self._calc_dhamdk(kp)
+        _eigv, _eigs = self.calc_eigvk(kp)
+        d1, d2 = [{'x': 0, 'y': 1, 'z': 2}[i] for i in index]
 
-    def calc_alpha_tensor(self, num_kp,
-                          center=[0, 0, 0],
-                          dir1=[1, 0, 0],
-                          dir2=[0, 1, 0], num_occupy=1):
+        # matrix rep of velocity operator
+        # v_{mn}^\mu = 1/\hbar \langle u_{m,k}| \partial_\mu H(k) |u_{n,k} \rangle
+        velocity = np.zeros((self.num_wann, self.num_wann, 3),
+                            dtype=np.complex128)
+        for i in range(3):
+            velocity[:, :, i] = np.dot(
+                np.conj(_eigs.T), np.dot(_dhdk[:, :, i], _eigs))
+
+        gk = np.complex128(0.0)
+        eta = 1e-6
+        for n in range(self.num_wann):
+            gk0 = np.complex128(0.0)
+            for m in range(self.num_wann):
+                if m == n:
+                    continue
+                # To avoid the inf value at degenerate points
+                w_eta = (_eigv[n] - _eigv[m]) / \
+                    ((_eigv[n] - _eigv[m])**2 + eta**2)
+                w_eta = w_eta**3
+                # w_eta = 1.0/(_eigv[v] - _eigv[c])**3
+                gk0 += velocity[n, m, d1]*velocity[m, n, d2]*w_eta
+            gk += gk0*fermi_dirac(_eigv[n]-mu, kbT=kb*300)
+
+        return 2.0*gk.real
+
+    def calc_bcp_kplane(self, num_kp, center, dir1, dir2,
+                        num_occupy=1, mu=0.0, index='xx', mode='occupy'):
 
         if num_occupy > self.num_wann:
             print('Since num_occupy > num_wann, we set num_occupy = num_wann.')
             num_occupy = self.num_wann
 
-        mystruct = self.structure
+        kp_array, kpos_array = self.structure.get_kpoint_plane(
+            center, dir1, dir2, num_kp_dir=num_kp, frac='F')
 
-        kp_array, kpos_array = mystruct.get_kpoint_plane(
-            center, dir1, dir2, num_kp_dir=num_kp)
-
-        axx = np.zeros((num_kp, num_kp), dtype=np.float64)
-        ayy = np.zeros((num_kp, num_kp), dtype=np.float64)
-        azz = np.zeros((num_kp, num_kp), dtype=np.float64)
-        axy = np.zeros((num_kp, num_kp), dtype=np.float64)
-        axz = np.zeros((num_kp, num_kp), dtype=np.float64)
-        ayz = np.zeros((num_kp, num_kp), dtype=np.float64)
-
+        bcp = np.zeros((num_kp, num_kp), dtype=np.float64)
         for i in tqdm(range(num_kp)):
             for j in range(num_kp):
-                _xx, _yy, _zz, _xy, _xz, _yz = self._calc_alpha_tensor_singlek(
-                    kp_array[i, j, :], num_occupy)
-                axx[i, j] = _xx
-                ayy[i, j] = _yy
-                azz[i, j] = _zz
-                axy[i, j] = _xy
-                axz[i, j] = _xz
-                ayz[i, j] = _yz
+                kp = kp_array[i, j, :]
+                if mode == 'occupy':
+                    bcp[i, j] = self._calc_bcp_singlek_occupied(
+                        kp, num_occupy, index)
+                else:
+                    bcp[i, j] = self._calc_bcp_singlek_fermi(kp, mu, index)
 
-        return kpos_array, axx, ayy, azz, axy, axz, ayz
+        return kpos_array, bcp
+
+    def _calc_alpha_fermisurface(self, kp, mu, index='xxx'):
+        _dhdk = self._calc_dhamdk(kp)
+        _spin = self._calc_spinmat(kp)
+        _eigv, _eigs = self.calc_eigvk(kp)
+        d1, d2, d3 = [{'x': 0, 'y': 1, 'z': 2}[i] for i in index]
+
+        # matrix rep of velocity operator
+        # v_{mn}^\mu = 1/\hbar \langle u_{m,k}| \partial_\mu H(k) |u_{n,k} \rangle
+        velocity = np.zeros((self.num_wann, self.num_wann, 3),
+                            dtype=np.complex128)
+        for i in range(3):
+            velocity[:, :, i] = np.dot(
+                np.conj(_eigs.T), np.dot(_dhdk[:, :, i], _eigs))
+
+        # matrix rep of spin operator
+        # v_{mn}^\mu = 1/\hbar \langle u_{m,k}| \partial_\mu H(k) |u_{n,k} \rangle
+        spin = np.zeros((self.num_wann, self.num_wann, 3),
+                        dtype=np.complex128)
+        for i in range(3):
+            spin[:, :, i] = np.dot(
+                np.conj(_eigs.T), np.dot(_spin[:, :, i], _eigs))
+
+        alpha = np.complex128(0.0)
+        eta = 1e-6
+        for n in range(self.num_wann):
+            alpha1 = np.complex128(0.0)
+            alpha2 = np.complex128(0.0)
+            for m in range(self.num_wann):
+                if m == n:
+                    continue
+                # To avoid the inf value at degenerate points
+                w_eta = (_eigv[n] - _eigv[m]) / \
+                    ((_eigv[n] - _eigv[m])**2 + eta**2)
+                w_eta = w_eta**3
+                # w_eta = 1.0/(_eigv[v] - _eigv[c])**3
+                alpha1 += velocity[n, m, d2]*velocity[m, n, d3]*w_eta
+                alpha2 += spin[n, m, d1]*velocity[m, n, d3]*w_eta
+            alpha1 *= -spin[n, n, d1]
+            alpha2 *= velocity[n, n, d2]
+            alpha += alpha1 * fermi_dirac_derivative(_eigv[n]-mu, kbT=kb*300)
+            alpha += alpha2 * fermi_dirac_derivative(_eigv[n]-mu, kbT=kb*300)
+
+        return 2.0*alpha.real
+
+    def _calc_alpha_occupied(self, kp, num_occupy=1, index='xxx'):
+        _dhdk = self._calc_dhamdk(kp)
+        _spin = self._calc_spinmat(kp)
+        _eigv, _eigs = self.calc_eigvk(kp)
+        d1, d2, d3 = [{'x': 0, 'y': 1, 'z': 2}[i] for i in index]
+
+        # matrix rep of velocity operator
+        # v_{mn}^\mu = 1/\hbar \langle u_{m,k}| \partial_\mu H(k) |u_{n,k} \rangle
+        velocity = np.zeros((self.num_wann, self.num_wann, 3),
+                            dtype=np.complex128)
+        for i in range(3):
+            velocity[:, :, i] = np.dot(
+                np.conj(_eigs.T), np.dot(_dhdk[:, :, i], _eigs))
+
+        # matrix rep of spin operator
+        # v_{mn}^\mu = 1/\hbar \langle u_{m,k}| \partial_\mu H(k) |u_{n,k} \rangle
+        spin = np.zeros((self.num_wann, self.num_wann, 3),
+                        dtype=np.complex128)
+        for i in range(3):
+            spin[:, :, i] = np.dot(
+                np.conj(_eigs.T), np.dot(_spin[:, :, i], _eigs))
+
+        alpha = np.complex128(0.0)
+        eta = 1e-6
+        for v in range(num_occupy):
+            alpha1 = np.complex128(0.0)
+            alpha2 = np.complex128(0.0)
+            alpha3 = np.complex128(0.0)
+            for c in range(num_occupy, self.num_wann):
+                # To avoid the inf value at degenerate points
+                w_eta = (_eigv[v] - _eigv[c]) / \
+                    ((_eigv[v] - _eigv[c])**2 + eta**2)
+                # w_eta = 1.0/(_eigv[v] - _eigv[c])**3
+
+                alpha1 += -3.0*(spin[v, v, d1] - spin[c, c, d1]) * \
+                    velocity[v, c, d2]*velocity[c, v, d3]*w_eta**4
+                for m in range(self.num_wann):
+                    if m != v:
+                        # To avoid the inf value at degenerate points
+                        w_eta1 = (_eigv[v] - _eigv[m]) / \
+                            ((_eigv[v] - _eigv[m])**2 + eta**2)
+                        # w_eta1 = 1.0/(_eigv[v] - _eigv[c])**3
+                        alpha2 += spin[v, m, d1] * velocity[m, c, d2] * \
+                            velocity[c, v, d3]*w_eta1*w_eta**3
+                        alpha2 += spin[v, m, d1] * velocity[m, c, d3] * \
+                            velocity[c, v, d2]*w_eta1*w_eta**3
+
+                    if m != c:
+                        # To avoid the inf value at degenerate points
+                        w_eta2 = (_eigv[c] - _eigv[m]) / \
+                            ((_eigv[c] - _eigv[m])**2 + eta**2)
+                        # w_eta1 = 1.0/(_eigv[v] - _eigv[c])**3
+                        alpha3 += spin[c, m, d1] * velocity[m, v, d2] * \
+                            velocity[v, c, d3]*w_eta2*w_eta**3
+                        alpha3 += spin[c, m, d1] * velocity[m, v, d3] * \
+                            velocity[v, c, d2]*w_eta2*w_eta**3
+
+            alpha += alpha1 + alpha2 + alpha3
+
+        return 2.0*alpha.real
+
+    def calc_alpha_kplane(self, num_kp, center, dir1, dir2,
+                          mu=0.0, num_occupy=1, index='xxx', mode='occupy'):
+
+        if num_occupy > self.num_wann:
+            print('Since num_occupy > num_wann, we set num_occupy = num_wann.')
+            num_occupy = self.num_wann
+
+        kp_array, kpos_array = self.structure.get_kpoint_plane(
+            center, dir1, dir2, num_kp_dir=num_kp)
+
+        alpha = np.zeros((num_kp, num_kp), dtype=np.float64)
+        for i in tqdm(range(num_kp)):
+            for j in range(num_kp):
+                kp = kp_array[i, j, :]
+                if mode == 'occupy':
+                    alpha[i, j] = self._calc_alpha_occupied(
+                        kp, num_occupy, index)
+                else:
+                    alpha[i, j] = self._calc_alpha_fermisurface(kp, mu, index)
+
+        return kpos_array, alpha
 
     def _calc_quanmetric_singlek(self, kp, num_occupy):
         """ Calculate quantum metric tensor for a single k. """
