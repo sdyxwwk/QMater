@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from scipy.optimize import minimize
+from tqdm import tqdm
 
 
 def get_kpoint_lines(kpath_start, kpath_end, num_kp_kpath=31):
@@ -101,8 +102,11 @@ class KdotP(object):
     def num_bands(self, _num_bands):
         self._num_bands = _num_bands
 
+    def _calc_hamk(self, kp):
+        return self.func(kp, self.parameters)
+
     def calc_eigvk(self, kp):
-        hamk = self.func(kp, self.parameters)
+        hamk = self._calc_hamk(kp)
         w, v = np.linalg.eigh(hamk)
         index = np.argsort(w.real)
         eigstat = v[:, index]
@@ -178,8 +182,7 @@ class KdotP(object):
         else:
             ymin, ymax = Elim
 
-        fig = plt.figure()
-        ax = fig.add_subplot(1, 1, 1)
+        fig, ax = plt.subplots()
         ax.plot(kpos_list, Elist)
 
         for i in range(num_label):
@@ -193,14 +196,13 @@ class KdotP(object):
         plt.xlim(kpos_list[0], kpos_list[-1])
         plt.ylim(ymin, ymax)
         plt.savefig('bands.pdf', dpi=300)
-        plt.show()
+        # plt.show()
         # return fig, ax
 
-    def plot_dispersion_3d(self, kplane_dir1, kplane_dir2,
-                           kplane_center=(0, 0, 0), num_kp_dir=11, select='All'):
+    def plot_dispersion_3d(self, kdir1, kdir2, kcenter,
+                           num_kp_dir=11, select='All'):
         kpoint_array, kpos_array = get_kpoint_plane(
-            kplane_center, kplane_dir1, kplane_dir2,
-            num_kp_dir=num_kp_dir)
+            kcenter, kdir1, kdir2, num_kp_dir)
 
         if select == 'All':
             select = np.linspace(
@@ -244,7 +246,42 @@ class KdotP(object):
             plt.show()
             # return fig, ax
 
-    #NOTE: bands = (kposlist, kx, ky, kz, energy)
+    def plot_fermisurf_kplane(self, mu, kdir1, kdir2, kcenter, num_kp_dir=11):
+        kpoint_array, kpos_array = get_kpoint_plane(
+            kcenter, kdir1, kdir2, num_kp_dir)
+
+        eta = 5e-3
+        ldos = np.zeros([num_kp_dir, num_kp_dir], dtype=np.float64)
+        for i in tqdm(range(num_kp_dir)):
+            for j in range(num_kp_dir):
+                kp = kpoint_array[i, j, :]
+                hamk = self._calc_hamk(kp)
+                G00 = np.linalg.inv(
+                    (mu + 1.j*eta)*np.eye(self.num_bands) - hamk)
+                ldos[i, j] = -np.trace(G00.imag)/np.pi
+
+        fig, ax = plt.subplots()
+        # cs = ax.contourf(
+        #     kpos_array[:, :, 0], kpos_array[:, :, 1], np.log(ldos),
+        #     levels=100,
+        #     cmap='inferno',
+        #     antialiased=False,
+        # )
+        cs = ax.imshow(
+            np.log(ldos),
+            cmap='inferno',
+        )
+        ax.set_aspect('equal', adjustable='box')
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_xlabel(r'$k_1$')
+        ax.set_ylabel(r'$k_2$')
+        ax.set_title('E = {:5.3f}'.format(mu))
+        fig.colorbar(cs)
+        fig.savefig('fermisurf.png', dpi=300)
+        # plt.show()
+
+    # NOTE: bands = (kposlist, kx, ky, kz, energy)
     def fit_parameters(self, bands, initial, cutoff=1.0, lplot=True):
         num_kp = bands.shape[0]
 

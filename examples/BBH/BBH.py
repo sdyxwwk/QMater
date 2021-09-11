@@ -1,8 +1,8 @@
 # ===============================================================
-# Example: Kane-Mele model
+# Example: BBH model
 #
 # Reference:
-#     [1] C. L. Kane and E. J. Mele, PRL 95, 226801 (2005)
+# [1] W. A. Benalcazar, B. A. Bernevig and T. L. Hughes, Science 357, 61 (2017) 
 #
 # Author: Weikang Wu (sdyxwwk)
 # Email: sdyxwwk@126.com
@@ -46,7 +46,7 @@ def Kane_Mele():
     my_model.add_hop([0, -1, 0], [0, 1], t*si)
 
     # SOC term
-    lambdaso = 1.8*t
+    lambdaso = 0.8*t
     my_model.add_hop([1, 0, 0], [0, 0], 1j*lambdaso*sz)
     my_model.add_hop([0, -1, 0], [0, 0], 1j*lambdaso*sz)
     my_model.add_hop([-1, 1, 0], [0, 0], 1j*lambdaso*sz)
@@ -55,7 +55,7 @@ def Kane_Mele():
     my_model.add_hop([-1, 0, 0], [1, 1], 1j*lambdaso*sz)
 
     # Rashba term which violates M_{z} symmetry
-    lambdaR = 0.0*t
+    lambdaR = 0.1*t
     my_model.add_hop([0, 0, 0], [0, 1], 1j*lambdaR*(sx))
     my_model.add_hop([-1, 0, 0], [0, 1], 1j*lambdaR *
                      (-1./2.*sx-np.sqrt(3)/2.*sy))
@@ -89,32 +89,6 @@ def plot_bands(model):
     kpath_label = ['G', 'M', 'K', 'G']
 
     model.plot_band_structure(kpath_label, highk, num_kp_kpath=81)
-
-def plot_fermisurf(model):
-    lat = model.reciprocal_lattice[:2, :2]
-    kpos, ldos = model.calc_fermisurf_kplane(
-        mu=1.0,
-        kdir1=[2.0, 0.0, 0.0],
-        kdir2=[0.0, 2.0, 0.0],
-        kcenter=[0.0, 0.0, 0.0],
-        num_kp_dir=301,
-    )
-
-    kpos_new = np.dot(kpos, lat)
-
-    fig, ax = plt.subplots()
-    ct = ax.contourf(
-        kpos_new[:, :, 0], kpos_new[:, :, 1], np.log(ldos),
-        levels=100,
-        cmap='inferno',
-        antialiased=False,
-    )
-    ax.set_xlabel(r'$k_x$')
-    ax.set_ylabel(r'$k_y$')
-    plt.axis('equal')
-    plt.colorbar(ct)
-    plt.savefig('fermisurf.png', dpi=300)
-    # plt.show()
 
 
 def plot_wilsonloop(model):
@@ -224,5 +198,5 @@ if __name__ == '__main__':
     # plot_wilsonloop(my_model)
     # plot_berrycurvature(my_model)
     # plot_bcp(my_model)
-    # plot_alpha(my_model)
-    plot_fermisurf(my_model)
+    plot_alpha(my_model)
+    # print(my_model._calc_alpha_fermisurface([0, 0.4, 0], 0.5, index='xxy'))

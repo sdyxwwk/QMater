@@ -512,6 +512,22 @@ class WannierTB(object):
 
         return spinmat
 
+    def calc_fermisurf_kplane(self, mu, kdir1, kdir2, kcenter, num_kp_dir=11):
+        kp_array, kpos_array = self.structure.get_kpoint_plane(
+            kcenter, kdir1, kdir2, num_kp_dir, frac='F')
+
+        eta = 5e-3
+        ldos = np.zeros([num_kp_dir, num_kp_dir], dtype=np.float64)
+        for i in tqdm(range(num_kp_dir)):
+            for j in range(num_kp_dir):
+                kp = kp_array[i, j, :]
+                hamk = self._calc_hamk(kp)
+                G00 = np.linalg.inv(
+                    (mu + 1.j*eta)*np.eye(self.num_wann) - hamk)
+                ldos[i, j] = -np.trace(G00.imag)/np.pi
+
+        return kpos_array, ldos
+
     def _calc_berryphase_1d(self, num_occupy, kp_list, if_eigval=False):
         """ calculate Berry phase along a closed k-path
                 - Refer to `Phys. Rev. B 83, 235401 (2011).`

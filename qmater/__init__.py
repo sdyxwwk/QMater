@@ -3,7 +3,7 @@
 
 # Author: Weikang Wu (sdyxwwk)
 # Email: sdyxwwk@126.com
-# Date: 17/09/2020
+# Date: 09/09/2021
 
 __version__ = '1.0.1'
 __all__ = ['__version__',
