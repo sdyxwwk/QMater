@@ -44,19 +44,23 @@ def CBTP_2d(kp, paralist):
     return ham
 
 def plot_bands(model):
-    k = 10.0
+    k = 3.0
     highk = {
         'G': [0., 0., 0.],
         'X': [k, 0., 0.],
         'Y': [0., k, 0.],
         'M': [k/np.sqrt(2), k/np.sqrt(2), 0.],
     }
-    kpath_label = ['X', 'G', 'M']
-    model.plot_dispersion(
+    kpath_label = ['X', 'G', 'Y']
+    fig, ax = model.plot_dispersion(
         kpath_label, highk, 
-        num_kp_kpath=31, 
-        Elim=None
+        num_kp_kpath=101, 
+        Elim=[-2,3]
     )
+    ax.plot([0,2*k],[0.75,0.75], '--r')
+    ax.plot([0,2*k],[1.5,1.5], '--r')
+    ax.plot([0,2*k],[-0.5,-0.5], '--r')
+    plt.show()
 
 def plot_bands_3d(model):
     kdir1 = [2., 0., 0.]
@@ -72,10 +76,11 @@ def plot_fermisurface(model):
     kdir1 = [6., 0., 0.]
     kdir2 = [0., 6., 0.]
     kcenter = [0., 0., 0.]
-    mu = 0.6
-    model.plot_fermisurf(
+    mu = 1.5
+    model.plot_fermisurf_kplane(
         mu, kdir1, kdir2, kcenter,
-        num_kp_dir=301,
+        num_kp_dir=501,
+        eta=1e-2,
     )
 
 
@@ -95,7 +100,7 @@ def calc_berryphase(model):
 #------------------------------------------------
 # Define a model and perform calculations 
 #------------------------------------------------
-para = (2.0, 1.0, 0.05, 0.0) # omega_1, alpha, beta, gamma
+para = (1.2, 0.5, 0.03, 0.0) # omega_1, alpha, beta, gamma
 my_kdotp = qm.KdotP(CBTP_2d, num_bands=2, para_list=para)
 # plot_bands(my_kdotp)
 # plot_bands_3d(my_kdotp)

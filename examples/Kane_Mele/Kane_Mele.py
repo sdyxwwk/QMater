@@ -54,7 +54,7 @@ def Kane_Mele():
     my_model.add_hop([1, -1, 0], [1, 1], 1j*lambdaso*sz)
     my_model.add_hop([-1, 0, 0], [1, 1], 1j*lambdaso*sz)
 
-    # Rashba term which violates M_{z} symmetry
+    # Intrinsic Rashba term which violates M_{z} symmetry
     lambdaR = 0.0*t
     my_model.add_hop([0, 0, 0], [0, 1], 1j*lambdaR*(sx))
     my_model.add_hop([-1, 0, 0], [0, 1], 1j*lambdaR *
@@ -89,6 +89,7 @@ def plot_bands(model):
     kpath_label = ['G', 'M', 'K', 'G']
 
     model.plot_band_structure(kpath_label, highk, num_kp_kpath=81)
+
 
 def plot_fermisurf(model):
     lat = model.reciprocal_lattice[:2, :2]
@@ -218,6 +219,21 @@ def plot_alpha(model):
     # plt.show()
 
 
+def get_BZshape(model):
+    kp = np.array([
+        [ 2/3, 1/3, 0.0],
+        [ 1/3, 2/3, 0.0],
+        [-1/3, 1/3, 0.0],
+        [-2/3,-1/3, 0.0],
+        [-1/3,-2/3, 0.0],
+        [ 1/3,-1/3, 0.0],
+        [ 2/3, 1/3, 0.0],
+    ])
+    kp_cart = my_model.structure.get_kpoint_cart(kp)
+    for _kp in kp_cart:
+        print(('{:15.9f}'*3).format(*_kp))
+
+
 if __name__ == '__main__':
     my_model = Kane_Mele()
     # plot_bands(my_model)
@@ -225,4 +241,7 @@ if __name__ == '__main__':
     # plot_berrycurvature(my_model)
     # plot_bcp(my_model)
     # plot_alpha(my_model)
-    plot_fermisurf(my_model)
+    # plot_fermisurf(my_model)
+    rot = np.array([[0, -1, 0], [1, -1, 0], [0, 0, 1]])
+    symm = qm.SymmOper(rot, matrep=np.eye(3))
+    my_model.build_WannierTB_symm(symm)

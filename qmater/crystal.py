@@ -436,7 +436,7 @@ class CrystStruct(object):
         for _elem, _pos in self._atom_sites.items():
             atomsites_new[_elem] = np.dot(_pos + trans, np.linalg.inv(rot))
 
-        return CrystStruct.set_model(lattice=lattice_new, atomsites=atomsites_new)
+        return CrystStruct().set_model(lattice=lattice_new, atomsites=atomsites_new)
 
     # TODO: Add index list
     def build_supercell(self, size=[(0, 0), (0, 0), (0, 0)]):
@@ -487,7 +487,7 @@ class CrystStruct(object):
 
             atomsites_new[_elem] = _pos_cart_new
 
-        return CrystStruct.set_model(lattice_new, atomsites_new, frac=False)
+        return CrystStruct().set_model(lattice_new, atomsites_new, frac=False)
 
     def build_vacuumlayer(self, length=10.0, direction='c'):
         """ Build a new CrystStruct instance after adding a vacuum layer.
@@ -558,15 +558,15 @@ class CrystStruct(object):
         _atomsites2 = struct.atom_sites
         atomsites_new = {}
 
-        for _elem, _pos in _atomsites1:
+        for _elem, _pos in _atomsites1.items():
             _pos_cart = np.dot(_pos, _lattice1)
             atomsites_new[_elem] = _pos_cart
 
-        for _elem, _pos in _atomsites2:
-            _pos_cart = np.dot(_pos, _lattice2)
+        for _elem, _pos in _atomsites2.items():
+            _pos_cart = np.dot(_pos, _lattice2) + _lattice1[_nz, :]
             if _elem in atomsites_new.keys():
                 atomsites_new[_elem] = np.vstack(
-                    atomsites_new[_elem], _pos_cart)
+                    (atomsites_new[_elem], _pos_cart))
             else:
                 atomsites_new[_elem] = _pos_cart
 

@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from qmater.crystal import CrystStruct
+from qmater.symmetry import SymmOper
 from qmater.func import fermi_dirac, fermi_dirac_derivative
 
 # --------------------------------
@@ -130,6 +131,10 @@ class WannierTB(object):
     @fermi.setter
     def fermi(self, fermi):
         self._fermi = fermi
+
+    @property
+    def R_vectors(self):
+        return [a[0] for a in self._hoplist]
 
     # ------------------------
     #  internal functions
@@ -1027,6 +1032,30 @@ class WannierTB(object):
                 gzx[i, j] = _zx
 
         return kpos_array, gxx, gyy, gzz, gxy, gyz, gzx
+
+    def get_operation_matrep(self, operation, matrep, kp, if_eigval=True):
+        kp_frac = np.array(kp, dtype=np.float64)
+        kp_cart = self.structure.get_kpoint_cart(kp)
+        R, v = operation
+        Rkp_cart = np.dot(R, kp_cart)
+        Rkp_frac = self.structure.get_kpoint_frac(Rkp_cart)
+
+        _wcc = self.wannier_centers_cart
+        Umat = np.diag([np.exp(1.j * np.dot(Rkp_cart - kp_cart, _wcc[i, :]))
+                        for i in range(self.num_wann)])
+        Dg_k = np.dot(Umat, matrep)*np.exp(-1.j * np.dot(Rkp_frac, v))
+
+        _eigv, _eigs = self.calc_eigvk(kp_frac)
+        mat = np.dot(np.conj(_eigs.T), np.dot(Dg_k, _eigs))
+        if if_eigval:
+            return _eigv, np.diag(mat)
+        else:
+            return _eigv, mat
+
+    def build_WannierTB_symm(self, symm_oper):
+        # print(np.dot(symm_oper.rot, [0, 0, 1]))
+        for Rvec in self.R_vectors:
+            print(np.dot(symm_oper.rot, Rvec))
 
     # ----------------
     #  plotting

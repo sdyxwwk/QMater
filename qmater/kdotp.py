@@ -195,9 +195,9 @@ class KdotP(object):
         plt.ylabel('Energy', fontsize=12)
         plt.xlim(kpos_list[0], kpos_list[-1])
         plt.ylim(ymin, ymax)
-        plt.savefig('bands.pdf', dpi=300)
+        # plt.savefig('bands.pdf', dpi=300)
         # plt.show()
-        # return fig, ax
+        return fig, ax
 
     def plot_dispersion_3d(self, kdir1, kdir2, kcenter,
                            num_kp_dir=11, select='All'):
@@ -246,11 +246,11 @@ class KdotP(object):
             plt.show()
             # return fig, ax
 
-    def plot_fermisurf_kplane(self, mu, kdir1, kdir2, kcenter, num_kp_dir=11):
+    def plot_fermisurf_kplane(self, mu, kdir1, kdir2, kcenter, num_kp_dir=11, eta=1e-3):
         kpoint_array, kpos_array = get_kpoint_plane(
             kcenter, kdir1, kdir2, num_kp_dir)
 
-        eta = 5e-3
+        # eta = 5e-3
         ldos = np.zeros([num_kp_dir, num_kp_dir], dtype=np.float64)
         for i in tqdm(range(num_kp_dir)):
             for j in range(num_kp_dir):

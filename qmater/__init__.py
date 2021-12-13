@@ -11,6 +11,7 @@ __all__ = ['__version__',
            'WannierTB',
            'BandStruct',
            'KdotP',
+           'SymmOper',
            'func',
            ]
 
@@ -19,3 +20,4 @@ from qmater.crystal import CrystStruct
 from qmater.wannier import WannierTB
 from qmater.bandstructure import BandStruct
 from qmater.kdotp import KdotP
+from qmater.symmetry import SymmOper
